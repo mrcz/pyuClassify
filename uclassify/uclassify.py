@@ -97,6 +97,26 @@ class uclassify(object):
 
         return doc,root_element
 
+    def _buildReadDoc(self, classifier_name):
+        doc, root_element = self._buildbasicXMLdoc()
+        readcalls = doc.createElement("readCalls")
+        if self.connector.API_KEYS_NEEDED:
+            if self.readApiKey == None:
+                raise uClassifyError("Read API Key not Initialized")
+            readcalls.setAttribute("readApiKey", self.readApiKey)
+        readcalls.setAttribute("classifierName", classifierName)
+        return doc, root_element, writecalls
+
+    def _buildWriteDoc(self, classifier_name):
+        doc, root_element = self._buildbasicXMLdoc()
+        writecalls = doc.createElement("writeCalls")
+        if self.connector.API_KEYS_NEEDED:
+            if self.writeApiKey == None:
+                raise uClassifyError("Write API Key not Initialized")
+            writecalls.setAttribute("writeApiKey", self.writeApiKey)
+        writecalls.setAttribute("classifierName", classifierName)
+        return doc, root_element, writecalls
+
     def _getText(self, nodelist):
         rc = []
         for node in nodelist:
@@ -120,11 +140,7 @@ class uclassify(object):
         """Creates a new classifier.
            :param classifierName: (required) The Classifier Name you are going to create.
         """
-        doc,root_element = self._buildbasicXMLdoc()
-        writecalls = doc.createElement("writeCalls")
-        if self.connector.API_KEYS_NEEDED:
-            writecalls.setAttribute("writeApiKey",self.writeApiKey) #Add exception handling here
-        writecalls.setAttribute("classifierName",classifierName)
+        doc,root_element,writecalls = self._buildWriteDoc(classifierName)
         create = doc.createElement("create")
         cur_time = strftime("%Y%m%d%H%M", gmtime())
         create.setAttribute("id",cur_time + "create" + classifierName)
@@ -137,14 +153,7 @@ class uclassify(object):
            :param className: (required) A List containing various classes that has to be added for the given Classifier.
            :param classifierName: (required) Classifier where the classes will be added to.
         """
-        doc, root_element = self._buildbasicXMLdoc()
-        writecalls = doc.createElement("writeCalls")
-        if self.connector.API_KEYS_NEEDED:
-            if self.writeApiKey == None:
-                raise uClassifyError("Write API Key not Initialized")
-            writecalls.setAttribute("writeApiKey",self.writeApiKey)
-        writecalls.setAttribute("classifierName",classifierName)
-        root_element.appendChild(writecalls)
+        doc, root_element, writecalls = self._builWriteDoc(classifierName)
         for clas in className:
             addclass = doc.createElement("addClass")
             addclass.setAttribute("id","AddClass" + clas)
@@ -157,14 +166,7 @@ class uclassify(object):
            :param className: (required) A List containing various classes that will be removed from the given Classifier.
            :param classifierName: (required) Classifier
         """
-        doc, root_element = self._buildbasicXMLdoc()
-        writecalls = doc.createElement("writeCalls")
-        if self.connector.API_KEYS_NEEDED:
-            if self.writeApiKey == None:
-                raise uClassifyError("Write API Key not Initialized")
-            writecalls.setAttribute("writeApiKey",self.writeApiKey)
-        writecalls.setAttribute("classifierName",classifierName)
-        root_element.appendChild(writecalls)
+        doc, root_element, writecalls = self._builWriteDoc(classifierName)
         for clas in className:
             addclass = doc.createElement("removeClass")
             addclass.setAttribute("id","removeClass" + clas)
@@ -182,16 +184,9 @@ class uclassify(object):
         for text in texts:
             base64_text = base64.b64encode(text) #For Python version 3, need to change.
             base64texts.append(base64_text)
-        doc,root_element = self._buildbasicXMLdoc()
+        doc, root_element, writecalls = self._builWriteDoc(classifierName)
         textstag = doc.createElement("texts")
-        writecalls = doc.createElement("writeCalls")
-        if self.connector.API_KEYS_NEEDED:
-            if self.writeApiKey == None:
-                raise uClassifyError("Write API Key not Initialized")
-            writecalls.setAttribute("writeApiKey",self.writeApiKey)
-        writecalls.setAttribute("classifierName",classifierName)
         root_element.appendChild(textstag)
-        root_element.appendChild(writecalls)
         counter = 1
         for text in base64texts:
             textbase64 = doc.createElement("textBase64")
@@ -217,16 +212,9 @@ class uclassify(object):
         for text in texts:
             base64_text = base64.b64encode(text) #For Python version 3, need to change.
             base64texts.append(base64_text)
-        doc,root_element = self._buildbasicXMLdoc()
+        doc, root_element, writecalls = self._builWriteDoc(classifierName)
         textstag = doc.createElement("texts")
-        writecalls = doc.createElement("writeCalls")
-        if self.connector.API_KEYS_NEEDED:
-            if self.writeApiKey == None:
-                raise uClassifyError("Write API Key not Initialized")
-            writecalls.setAttribute("writeApiKey",self.writeApiKey)
-        writecalls.setAttribute("classifierName",classifierName)
         root_element.appendChild(textstag)
-        root_element.appendChild(writecalls)
         counter = 1
         for text in base64texts:
             textbase64 = doc.createElement("textBase64")
@@ -248,15 +236,9 @@ class uclassify(object):
            :param classifierName: (required) Classifier Name
            :param username: (optional): Name of the user, under whom the classifier exists.
         """
-        doc,root_element = self._buildbasicXMLdoc()
+        doc, root_element, readcalls = self._builReadDoc(classifierName)
         textstag = doc.createElement("texts")
-        readcalls = doc.createElement("readCalls")
-        if self.connector.API_KEYS_NEEDED:
-            if self.readApiKey == None:
-                raise uClassifyError("Read API Key not Initialized")
-            readcalls.setAttribute("readApiKey",self.readApiKey)
         root_element.appendChild(textstag)
-        root_element.appendChild(readcalls)
         base64texts = []
         for text in texts:
             base64_text = base64.b64encode(text) #For Python version 3, need to change.
@@ -306,15 +288,9 @@ class uclassify(object):
            :param classifierName: (required) Classifier Name
            :param username: (optional): Name of the user, under whom the classifier exists.
         """
-        doc,root_element = self._buildbasicXMLdoc()
+        doc, root_element, readcalls = self._builReadDoc(classifierName)
         textstag = doc.createElement("texts")
-        readcalls = doc.createElement("readCalls")
-        if self.connector.API_KEYS_NEEDED:
-            if self.readApiKey == None:
-                raise uClassifyError("Read API Key not Initialized")
-            readcalls.setAttribute("readApiKey",self.readApiKey)
         root_element.appendChild(textstag)
-        root_element.appendChild(readcalls)
         base64texts = []
         for text in texts:
             base64_text = base64.b64encode(text) #For Python version 3, need to change.
@@ -365,18 +341,12 @@ class uclassify(object):
                 result.append((texts[counter],text_coverage,cresult,keyw))
                 counter = counter + 1
             return result
-    
+
     def getInformation(self,classifierName):
         """Returns Information about the Classifier in a List.
            :param classifierName: (required) Classifier Name
         """
-        doc,root_element = self._buildbasicXMLdoc()
-        readcalls = doc.createElement("readCalls")
-        if self.connector.API_KEYS_NEEDED:
-            if self.readApiKey == None:
-                raise uClassifyError("Read API Key not Initialized")
-            readcalls.setAttribute("readApiKey",self.readApiKey)
-        root_element.appendChild(readcalls)
+        doc, root_element, readcalls = self._builReadDoc(classifierName)
         getinfotag = doc.createElement("getInformation")
         getinfotag.setAttribute("id","GetInformation")
         getinfotag.setAttribute("classifierName",classifierName)
@@ -403,13 +373,7 @@ class uclassify(object):
         """Removes Classifier.
            :param classifierName(required): Classifier Name
         """
-        doc,root_element = self._buildbasicXMLdoc()
-        writecalls = doc.createElement("writeCalls")
-        if self.connector.API_KEYS_NEEDED:
-            if self.writeApiKey == None:
-                raise uClassifyError("Write API Key not Initialized")
-            writecalls.setAttribute("writeApiKey",self.writeApiKey)
-        writecalls.setAttribute("classifierName",classifierName)
+        doc, root_element, writecalls = self._builWriteDoc(classifierName)
         removetag = doc.createElement("remove")
         removetag.setAttribute("id","Remove")
         root_element.appendChild(writecalls)
