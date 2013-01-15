@@ -29,6 +29,8 @@ from time import gmtime, strftime
 from uclassify_eh import uClassifyError
 import xml.dom.minidom
 import base64
+import requests
+import socket
 
 
 class HttpConnector(object):
@@ -55,8 +57,6 @@ class SocketConnector(object):
     SCHEMA         = 'http://api.uclassify.com/1/server/RequestSchema'
     API_KEYS_NEDED = False
     def __init__(self, host, port=54441, bufsize=65536):
-        import requests
-        import socket
         self.adr = (host, port)
         self.bufsize = bufsize
     def send(self, xml):
