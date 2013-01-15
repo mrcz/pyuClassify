@@ -21,39 +21,83 @@
 # You should have received a copy of the GNU General Public License
 # along with pyuClassify.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Author:   Sibi <sibi@psibi.in>
+# Authors:  Sibi <sibi@psibi.in>
+#           Marcus Svensson <marcus@twingly.com>
 
 from xml.dom.minidom import Document
 from time import gmtime, strftime
 from uclassify_eh import uClassifyError
 import xml.dom.minidom
-import requests
 import base64
 
-class uclassify:
-    def __init__(self):
-        self.api_url = "http://api.uclassify.com"
-        self.writeApiKey=None
-        self.readApiKey=None
 
-    def setWriteApiKey(self,key):
+class HttpConnector(object):
+    BASE_API       = 'http://api.uclassify.com'
+    SCHEMA         = 'http://api.uclassify.com/1/RequestSchema'
+    API_KEYS_NEDED = True
+    def __init__(self, read_api_key, write_api_key, url=BASE_API):
+        self.read_api_key = read_api_key
+        self.write_api_key = write_api_key
+        self.url = url
+    def send(self, xml):
+        content = xml.toxml('utf-8')
+        r = requests.post(self.api_url, content)
+        if r.status_code == 200:
+            success, status_code, text = self._getResponseCode(r.content)
+            if success == "false":
+                raise uClassifyError(text, status_code)
+        else:
+            raise uClassifyError("Bad XML Request Sent")
+        return text
+
+
+class SocketConnector(object):
+    SCHEMA         = 'http://api.uclassify.com/1/server/RequestSchema'
+    API_KEYS_NEDED = False
+    def __init__(self, host, port=54441, bufsize=65536):
+        import requests
+        import socket
+        self.adr = (host, port)
+        self.bufsize = bufsize
+    def send(self, xml):
+        api_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        api_socket.connect(self.adr)
+        content = xml.toxml('utf-8')
+        api_socket.sendall(content)
+        api_socket.shutdown(socket.SHUT_WR)
+        response = []
+        while True:
+            b = api_socket.recv(self.bufsize)
+            response.append(b)
+            if len(b) == 0:
+                api_socket.close()
+                return ''.join(response)
+
+
+class uclassify(object):
+
+    def __init__(self, connector=None):
+        if connector is None:
+            self.connector = SocketConnector('dev01')
+        else:
+            self.connector = connector
+
+    def setWriteApiKey(self, key):
         self.writeApiKey = key
 
-    def setReadApiKey(self,key):
+    def setReadApiKey(self, key):
         self.readApiKey = key
 
     def _buildbasicXMLdoc(self):
         doc = Document()
-        root_element = doc.createElementNS('http://api.uclassify.com/1/RequestSchema', 'uclassify')
+        root_element = doc.createElementNS(self.connector.SCHEMA, 'uclassify')
         root_element.setAttribute("version", "1.01")
-        root_element.setAttribute("xmlns", "http://api.uclassify.com/1/RequestSchema")
+        root_element.setAttribute("xmlns", self.connector.SCHEMA)
         doc.appendChild(root_element)
-        #texts = doc.createElement("texts")
-        #root_element.appendChild(texts)
-        #print(doc.toprettyxml())
+
         return doc,root_element
 
-    def _getText(self,nodelist):
+    def _getText(self, nodelist):
         rc = []
         for node in nodelist:
             if node.nodeType == node.TEXT_NODE:
@@ -78,20 +122,15 @@ class uclassify:
         """
         doc,root_element = self._buildbasicXMLdoc()
         writecalls = doc.createElement("writeCalls")
-        writecalls.setAttribute("writeApiKey",self.writeApiKey) #Add exception handling here
+        if self.connector.API_KEYS_NEEDED:
+            writecalls.setAttribute("writeApiKey",self.writeApiKey) #Add exception handling here
         writecalls.setAttribute("classifierName",classifierName)
         create = doc.createElement("create")
         cur_time = strftime("%Y%m%d%H%M", gmtime())
         create.setAttribute("id",cur_time + "create" + classifierName)
         root_element.appendChild(writecalls)
         writecalls.appendChild(create)
-        r = requests.post(self.api_url,doc.toxml())
-        if r.status_code == 200:
-            success, status_code, text = self._getResponseCode(r.content)
-            if success == "false":
-                raise uClassifyError(text,status_code)
-        else:
-            raise uClassifyError("Bad XML Request Sent")
+        return self.connector.send(doc)
 
     def addClass(self,className,classifierName):
         """Adds class to an existing Classifier.
@@ -100,9 +139,10 @@ class uclassify:
         """
         doc, root_element = self._buildbasicXMLdoc()
         writecalls = doc.createElement("writeCalls")
-        if self.writeApiKey == None:
-            raise uClassifyError("Write API Key not Initialized")
-        writecalls.setAttribute("writeApiKey",self.writeApiKey)
+        if self.connector.API_KEYS_NEEDED:
+            if self.writeApiKey == None:
+                raise uClassifyError("Write API Key not Initialized")
+            writecalls.setAttribute("writeApiKey",self.writeApiKey)
         writecalls.setAttribute("classifierName",classifierName)
         root_element.appendChild(writecalls)
         for clas in className:
@@ -110,13 +150,7 @@ class uclassify:
             addclass.setAttribute("id","AddClass" + clas)
             addclass.setAttribute("className",clas)
             writecalls.appendChild(addclass)
-        r = requests.post(self.api_url,doc.toxml())
-        if r.status_code == 200:
-            success, status_code, text = self._getResponseCode(r.content)
-            if success == "false":
-                raise uClassifyError(text,status_code)
-        else:
-            raise uClassifyError("Bad XML Request Sent")
+        return self.connector.send(doc)
     
     def removeClass(self,className,classifierName):
         """Removes class from an existing Classifier.
@@ -125,9 +159,10 @@ class uclassify:
         """
         doc, root_element = self._buildbasicXMLdoc()
         writecalls = doc.createElement("writeCalls")
-        if self.writeApiKey == None:
-            raise uClassifyError("Write API Key not Initialized")
-        writecalls.setAttribute("writeApiKey",self.writeApiKey)
+        if self.connector.API_KEYS_NEEDED:
+            if self.writeApiKey == None:
+                raise uClassifyError("Write API Key not Initialized")
+            writecalls.setAttribute("writeApiKey",self.writeApiKey)
         writecalls.setAttribute("classifierName",classifierName)
         root_element.appendChild(writecalls)
         for clas in className:
@@ -135,13 +170,7 @@ class uclassify:
             addclass.setAttribute("id","removeClass" + clas)
             addclass.setAttribute("className",clas)
             writecalls.appendChild(addclass)
-        r = requests.post(self.api_url,doc.toxml())
-        if r.status_code == 200:
-            success, status_code, text = self._getResponseCode(r.content)
-            if success == "false":
-                raise uClassifyError(text,status_code)
-        else:
-            raise uClassifyError("Bad XML Request Sent")
+        return self.connector.send(doc)
     
     def train(self,texts,className,classifierName):
         """Performs training on a single classs.
@@ -156,9 +185,10 @@ class uclassify:
         doc,root_element = self._buildbasicXMLdoc()
         textstag = doc.createElement("texts")
         writecalls = doc.createElement("writeCalls")
-        if self.writeApiKey == None:
-            raise uClassifyError("Write API Key not Initialized")
-        writecalls.setAttribute("writeApiKey",self.writeApiKey)
+        if self.connector.API_KEYS_NEEDED:
+            if self.writeApiKey == None:
+                raise uClassifyError("Write API Key not Initialized")
+            writecalls.setAttribute("writeApiKey",self.writeApiKey)
         writecalls.setAttribute("classifierName",classifierName)
         root_element.appendChild(textstag)
         root_element.appendChild(writecalls)
@@ -175,13 +205,7 @@ class uclassify:
             traintag.setAttribute("textId",className + "Text" + str(counter))
             counter = counter + 1
             writecalls.appendChild(traintag)
-        r = requests.post(self.api_url,doc.toxml())
-        if r.status_code == 200:
-            success, status_code, text = self._getResponseCode(r.content)
-            if success == "false":
-                raise uClassifyError(text,status_code)
-        else:
-            raise uClassifyError("Bad XML Request Sent")
+        return self.connector.send(doc)
 
     def untrain(self,texts,className,classifierName):
         """Performs untraining on text for a specific class.
@@ -196,9 +220,10 @@ class uclassify:
         doc,root_element = self._buildbasicXMLdoc()
         textstag = doc.createElement("texts")
         writecalls = doc.createElement("writeCalls")
-        if self.writeApiKey == None:
-            raise uClassifyError("Write API Key not Initialized")
-        writecalls.setAttribute("writeApiKey",self.writeApiKey)
+        if self.connector.API_KEYS_NEEDED:
+            if self.writeApiKey == None:
+                raise uClassifyError("Write API Key not Initialized")
+            writecalls.setAttribute("writeApiKey",self.writeApiKey)
         writecalls.setAttribute("classifierName",classifierName)
         root_element.appendChild(textstag)
         root_element.appendChild(writecalls)
@@ -215,13 +240,7 @@ class uclassify:
             traintag.setAttribute("textId",className + "Text" + str(counter))
             counter = counter + 1
             writecalls.appendChild(traintag)
-        r = requests.post(self.api_url,doc.toxml())
-        if r.status_code == 200:
-            success, status_code, text = self._getResponseCode(r.content)
-            if success == "false":
-                raise uClassifyError(text,status_code)
-        else:
-            raise uClassifyError("Bad XML Request Sent")
+        return self.connector.send(doc)
 
     def classify(self,texts,classifierName,username = None):
         """Performs classification on texts.
@@ -232,9 +251,10 @@ class uclassify:
         doc,root_element = self._buildbasicXMLdoc()
         textstag = doc.createElement("texts")
         readcalls = doc.createElement("readCalls")
-        if self.readApiKey == None:
-            raise uClassifyError("Read API Key not Initialized")
-        readcalls.setAttribute("readApiKey",self.readApiKey)
+        if self.connector.API_KEYS_NEEDED:
+            if self.readApiKey == None:
+                raise uClassifyError("Read API Key not Initialized")
+            readcalls.setAttribute("readApiKey",self.readApiKey)
         root_element.appendChild(textstag)
         root_element.appendChild(readcalls)
         base64texts = []
@@ -256,15 +276,7 @@ class uclassify:
             textstag.appendChild(textbase64)
             readcalls.appendChild(classifytag)
             counter = counter + 1
-        r = requests.post(self.api_url,doc.toxml())
-        if r.status_code == 200:
-            success, status_code, text = self._getResponseCode(r.content)
-            if success == "false":
-                raise uClassifyError(text,status_code)
-            else:
-                return self.parseClassifyResponse(r.content,texts)
-        else:
-            raise uClassifyError("Bad XML Request Sent")
+        return self.connector.send(doc)
 
     def parseClassifyResponse(self,content,texts):
         """Parses the Classifier response from the server.
@@ -297,9 +309,10 @@ class uclassify:
         doc,root_element = self._buildbasicXMLdoc()
         textstag = doc.createElement("texts")
         readcalls = doc.createElement("readCalls")
-        if self.readApiKey == None:
-            raise uClassifyError("Read API Key not Initialized")
-        readcalls.setAttribute("readApiKey",self.readApiKey)
+        if self.connector.API_KEYS_NEEDED:
+            if self.readApiKey == None:
+                raise uClassifyError("Read API Key not Initialized")
+            readcalls.setAttribute("readApiKey",self.readApiKey)
         root_element.appendChild(textstag)
         root_element.appendChild(readcalls)
         base64texts = []
@@ -321,15 +334,7 @@ class uclassify:
             textstag.appendChild(textbase64)
             readcalls.appendChild(classifytag)
             counter = counter + 1
-        r = requests.post(self.api_url,doc.toxml())
-        if r.status_code == 200:
-            success, status_code, text = self._getResponseCode(r.content)
-            if success == "false":
-                raise uClassifyError(text,status_code)
-            else:
-                return self.parseClassifyResponse(r.content,texts)
-        else:
-            raise uClassifyError("Bad XML Request Sent")
+        return self.connector.send(doc)
         
         def parseClassifyKeywordResponse(self,content,texts):
             """Parses the Classifier response from the server.
@@ -367,24 +372,17 @@ class uclassify:
         """
         doc,root_element = self._buildbasicXMLdoc()
         readcalls = doc.createElement("readCalls")
-        if self.readApiKey == None:
-            raise uClassifyError("Read API Key not Initialized")
-        readcalls.setAttribute("readApiKey",self.readApiKey)
+        if self.connector.API_KEYS_NEEDED:
+            if self.readApiKey == None:
+                raise uClassifyError("Read API Key not Initialized")
+            readcalls.setAttribute("readApiKey",self.readApiKey)
         root_element.appendChild(readcalls)
         getinfotag = doc.createElement("getInformation")
         getinfotag.setAttribute("id","GetInformation")
         getinfotag.setAttribute("classifierName",classifierName)
         readcalls.appendChild(getinfotag)
-        r = requests.post(self.api_url,doc.toxml())
-        if r.status_code == 200:
-            success, status_code, text = self._getResponseCode(r.content)
-            if success == "false":
-                raise uClassifyError(text,status_code)
-            else:
-                return self._parseClassifierInformation(r.content)
-        else:
-            raise uClassifyError("Bad XML Request Sent")
-        
+        return self.connector.send(doc)
+
     def _parseClassifierInformation(self,content):
         doc = xml.dom.minidom.parseString(content)
         node = doc.documentElement
@@ -407,27 +405,22 @@ class uclassify:
         """
         doc,root_element = self._buildbasicXMLdoc()
         writecalls = doc.createElement("writeCalls")
-        if self.writeApiKey == None:
-            raise uClassifyError("Write API Key not Initialized")
-        writecalls.setAttribute("writeApiKey",self.writeApiKey)
+        if self.connector.API_KEYS_NEEDED:
+            if self.writeApiKey == None:
+                raise uClassifyError("Write API Key not Initialized")
+            writecalls.setAttribute("writeApiKey",self.writeApiKey)
         writecalls.setAttribute("classifierName",classifierName)
         removetag = doc.createElement("remove")
         removetag.setAttribute("id","Remove")
         root_element.appendChild(writecalls)
         writecalls.appendChild(removetag)
-        r = requests.post(self.api_url,doc.toxml())
-        if r.status_code == 200:
-            success, status_code, text = self._getResponseCode(r.content)
-            if success == "false":
-                raise uClassifyError(text,status_code)
-        else:
-            raise uClassifyError("Bad XML Request Sent")
-            
-    
-if __name__ == "__main__":
-    a = uclassify()
-    a.setWriteApiKey("fsqAft7Hs29BgAc1AWeCIWdGnY")
-    a.setReadApiKey("aD02ApbU29kNOG2xezDGXPEIck")
+        return self.connector.send(doc)
+
+
+if __name__ == "__main__" and False:
+    a = UClassify()
+    #a.setWriteApiKey("fsqAft7Hs29BgAc1AWeCIWdGnY")
+    #a.setReadApiKey("aD02ApbU29kNOG2xezDGXPEIck")
     #a.create("ManorWoma")
     #a.addClass(["man","woman"],"ManorWoma")
     #a.train(["dffddddddteddddxt1","teddddxfddddddddt2","taaaaffaaaaaedddddddddddddxt3"],"woman","ManorWoma")
