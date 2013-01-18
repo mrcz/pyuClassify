@@ -1,1 +1,1 @@
-from uclassify import uclassify
+from uclassify import uclassify, SocketConnector, HttpConnector

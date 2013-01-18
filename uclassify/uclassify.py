@@ -34,15 +34,16 @@ import socket
 
 
 class HttpConnector(object):
-    BASE_API       = 'http://api.uclassify.com'
-    SCHEMA         = 'http://api.uclassify.com/1/RequestSchema'
-    API_KEYS_NEDED = True
-    def __init__(self, read_api_key, write_api_key, url=BASE_API):
+    BASE_API        = 'http://api.uclassify.com'
+    SCHEMA          = 'http://api.uclassify.com/1/RequestSchema'
+    API_KEYS_NEEDED = True
+    def __init__(self, read_api_key, write_api_key, api_url=BASE_API):
         self.read_api_key = read_api_key
         self.write_api_key = write_api_key
-        self.url = url
+        self.api_url = api_url
     def send(self, xml):
         content = xml.toxml('utf-8')
+        print content
         r = requests.post(self.api_url, content)
         if r.status_code == 200:
             success, status_code, text = self._getResponseCode(r.content)
@@ -51,11 +52,29 @@ class HttpConnector(object):
         else:
             raise uClassifyError("Bad XML Request Sent")
         return text
+    def _getResponseCode(self,content):
+        """Returns the status code from the content.
+           :param content: (required) XML Response content
+        """
+        doc = xml.dom.minidom.parseString(content)
+        node = doc.documentElement
+        status = node.getElementsByTagName("status")
+        success = status[0].getAttribute("success")
+        status_code = status[0].getAttribute("statusCode")
+        text = self._getText(status[0].childNodes)
+        return success, status_code, text
+    def _getText(self, nodelist):
+        return ''.join(node.data for node in nodelist if node.nodeType == node.TEXT_NODE)
+        rc = []
+        for node in nodelist:
+            if node.nodeType == node.TEXT_NODE:
+                rc.append(node.data)
+        return ''.join(rc)
 
 
 class SocketConnector(object):
-    SCHEMA         = 'http://api.uclassify.com/1/server/RequestSchema'
-    API_KEYS_NEDED = False
+    SCHEMA          = 'http://api.uclassify.com/1/server/RequestSchema'
+    API_KEYS_NEEDED = False
     def __init__(self, host, port=54441, bufsize=65536):
         self.adr = (host, port)
         self.bufsize = bufsize
@@ -101,23 +120,27 @@ class uclassify(object):
         doc, root_element = self._buildbasicXMLdoc()
         readcalls = doc.createElement("readCalls")
         if self.connector.API_KEYS_NEEDED:
-            if self.readApiKey == None:
+            if self.connector.read_api_key == None:
                 raise uClassifyError("Read API Key not Initialized")
             readcalls.setAttribute("readApiKey", self.readApiKey)
-        readcalls.setAttribute("classifierName", classifierName)
-        return doc, root_element, writecalls
+        readcalls.setAttribute("classifierName", classifier_name)
+        root_element.appendChild(readcalls)
+        return doc, root_element, readcalls
 
     def _buildWriteDoc(self, classifier_name):
         doc, root_element = self._buildbasicXMLdoc()
         writecalls = doc.createElement("writeCalls")
         if self.connector.API_KEYS_NEEDED:
-            if self.writeApiKey == None:
+            if self.connector.write_api_key == None:
                 raise uClassifyError("Write API Key not Initialized")
-            writecalls.setAttribute("writeApiKey", self.writeApiKey)
-        writecalls.setAttribute("classifierName", classifierName)
+            writecalls.setAttribute("writeApiKey", self.connector.write_api_key)
+        writecalls.setAttribute("classifierName", classifier_name)
+        root_element.appendChild(writecalls)
         return doc, root_element, writecalls
 
+    '''
     def _getText(self, nodelist):
+        return ''.join(node.data for node in nodelist if node.nodeType == node.TEXT_NODE)
         rc = []
         for node in nodelist:
             if node.nodeType == node.TEXT_NODE:
@@ -135,7 +158,7 @@ class uclassify(object):
         status_code = status[0].getAttribute("statusCode")
         text = self._getText(status[0].childNodes)
         return success, status_code, text
-
+        '''
     def create(self,classifierName):
         """Creates a new classifier.
            :param classifierName: (required) The Classifier Name you are going to create.
@@ -144,7 +167,6 @@ class uclassify(object):
         create = doc.createElement("create")
         cur_time = strftime("%Y%m%d%H%M", gmtime())
         create.setAttribute("id",cur_time + "create" + classifierName)
-        root_element.appendChild(writecalls)
         writecalls.appendChild(create)
         return self.connector.send(doc)
 
@@ -153,12 +175,13 @@ class uclassify(object):
            :param className: (required) A List containing various classes that has to be added for the given Classifier.
            :param classifierName: (required) Classifier where the classes will be added to.
         """
-        doc, root_element, writecalls = self._builWriteDoc(classifierName)
+        doc, root_element, writecalls = self._buildWriteDoc(classifierName)
         for clas in className:
             addclass = doc.createElement("addClass")
             addclass.setAttribute("id","AddClass" + clas)
             addclass.setAttribute("className",clas)
             writecalls.appendChild(addclass)
+        print doc
         return self.connector.send(doc)
     
     def removeClass(self,className,classifierName):
@@ -166,7 +189,7 @@ class uclassify(object):
            :param className: (required) A List containing various classes that will be removed from the given Classifier.
            :param classifierName: (required) Classifier
         """
-        doc, root_element, writecalls = self._builWriteDoc(classifierName)
+        doc, root_element, writecalls = self._buildWriteDoc(classifierName)
         for clas in className:
             addclass = doc.createElement("removeClass")
             addclass.setAttribute("id","removeClass" + clas)
@@ -184,7 +207,7 @@ class uclassify(object):
         for text in texts:
             base64_text = base64.b64encode(text) #For Python version 3, need to change.
             base64texts.append(base64_text)
-        doc, root_element, writecalls = self._builWriteDoc(classifierName)
+        doc, root_element, writecalls = self._buildWriteDoc(classifierName)
         textstag = doc.createElement("texts")
         root_element.appendChild(textstag)
         counter = 1
@@ -212,7 +235,7 @@ class uclassify(object):
         for text in texts:
             base64_text = base64.b64encode(text) #For Python version 3, need to change.
             base64texts.append(base64_text)
-        doc, root_element, writecalls = self._builWriteDoc(classifierName)
+        doc, root_element, writecalls = self._buildWriteDoc(classifierName)
         textstag = doc.createElement("texts")
         root_element.appendChild(textstag)
         counter = 1
@@ -236,7 +259,7 @@ class uclassify(object):
            :param classifierName: (required) Classifier Name
            :param username: (optional): Name of the user, under whom the classifier exists.
         """
-        doc, root_element, readcalls = self._builReadDoc(classifierName)
+        doc, root_element, readcalls = self._buildReadDoc(classifierName)
         textstag = doc.createElement("texts")
         root_element.appendChild(textstag)
         base64texts = []
@@ -288,7 +311,7 @@ class uclassify(object):
            :param classifierName: (required) Classifier Name
            :param username: (optional): Name of the user, under whom the classifier exists.
         """
-        doc, root_element, readcalls = self._builReadDoc(classifierName)
+        doc, root_element, readcalls = self._buildReadDoc(classifierName)
         textstag = doc.createElement("texts")
         root_element.appendChild(textstag)
         base64texts = []
@@ -346,7 +369,7 @@ class uclassify(object):
         """Returns Information about the Classifier in a List.
            :param classifierName: (required) Classifier Name
         """
-        doc, root_element, readcalls = self._builReadDoc(classifierName)
+        doc, root_element, readcalls = self._buildReadDoc(classifierName)
         getinfotag = doc.createElement("getInformation")
         getinfotag.setAttribute("id","GetInformation")
         getinfotag.setAttribute("classifierName",classifierName)
@@ -373,16 +396,14 @@ class uclassify(object):
         """Removes Classifier.
            :param classifierName(required): Classifier Name
         """
-        doc, root_element, writecalls = self._builWriteDoc(classifierName)
+        doc, root_element, writecalls = self._buildWriteDoc(classifierName)
         removetag = doc.createElement("remove")
         removetag.setAttribute("id","Remove")
-        root_element.appendChild(writecalls)
         writecalls.appendChild(removetag)
         return self.connector.send(doc)
 
 
-if __name__ == "__main__" and False:
-    a = UClassify()
+if __name__ == "__main__":
     #a.setWriteApiKey("fsqAft7Hs29BgAc1AWeCIWdGnY")
     #a.setReadApiKey("aD02ApbU29kNOG2xezDGXPEIck")
     #a.create("ManorWoma")
