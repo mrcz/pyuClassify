@@ -138,27 +138,6 @@ class uclassify(object):
         root_element.appendChild(writecalls)
         return doc, root_element, writecalls
 
-    '''
-    def _getText(self, nodelist):
-        return ''.join(node.data for node in nodelist if node.nodeType == node.TEXT_NODE)
-        rc = []
-        for node in nodelist:
-            if node.nodeType == node.TEXT_NODE:
-                rc.append(node.data)
-        return ''.join(rc)
-
-    def _getResponseCode(self,content):
-        """Returns the status code from the content.
-           :param content: (required) XML Response content
-        """
-        doc = xml.dom.minidom.parseString(content)
-        node = doc.documentElement
-        status = node.getElementsByTagName("status")
-        success = status[0].getAttribute("success")
-        status_code = status[0].getAttribute("statusCode")
-        text = self._getText(status[0].childNodes)
-        return success, status_code, text
-        '''
     def create(self,classifierName):
         """Creates a new classifier.
            :param classifierName: (required) The Classifier Name you are going to create.
